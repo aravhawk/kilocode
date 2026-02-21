@@ -2,7 +2,7 @@
 import type { ProviderSettings } from "@roo-code/types"
 
 import { buildApiHandler } from "../../api"
-import type { BenchEvaluation, BenchProblem, BenchRawResponse } from "./types"
+import type { BenchProblem, BenchRawResponse } from "./types"
 
 function buildEvaluationPrompt(problem: BenchProblem, response: string): string {
 	return `You are an expert AI evaluator judging the quality of a coding assistant's response.

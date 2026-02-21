@@ -114,7 +114,6 @@ export class BenchService {
 		const rawResponses: BenchRawResponse[] = await runBenchmark(
 			problems.problems,
 			models,
-			config,
 			this.providerSettings,
 			(update) => {
 				onProgress({

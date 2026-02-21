@@ -215,7 +215,7 @@ export async function generateProblems(
 	providerSettings: ProviderSettings,
 	abortSignal?: AbortSignal,
 ): Promise<BenchProblemSet> {
-	const { language, summary, keyFiles: _keyFiles } = await readWorkspaceSummary(cwd)
+	const { language, summary } = await readWorkspaceSummary(cwd)
 
 	const prompt = buildGeneratorPrompt(language, summary, config.activeModes, config.problemsPerMode)
 
