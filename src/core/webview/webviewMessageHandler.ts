@@ -933,6 +933,8 @@ export const webviewMessageHandler = async (
 						"sap-ai-core": {}, // kilocode_change
 						chutes: {},
 						"nano-gpt": {}, // kilocode_change
+						poe: {}, // kilocode_change
+						aihubmix: {}, // kilocode_change
 						zenmux: {},
 					}
 			const safeGetModels = async (options: GetModelsOptions): Promise<ModelRecord> => {
@@ -1003,6 +1005,14 @@ export const webviewMessageHandler = async (
 						nanoGptModelList: apiConfiguration.nanoGptModelList,
 					},
 				},
+				{
+					key: "aihubmix",
+					options: {
+						provider: "aihubmix",
+						apiKey: apiConfiguration.aihubmixApiKey,
+						baseUrl: apiConfiguration.aihubmixBaseUrl,
+					},
+				},
 				// kilocode_change end
 				{
 					key: "ovhcloud",
@@ -1035,6 +1045,12 @@ export const webviewMessageHandler = async (
 					key: "chutes",
 					options: { provider: "chutes", apiKey: apiConfiguration.chutesApiKey },
 				},
+				// kilocode_change start
+				{
+					key: "poe",
+					options: { provider: "poe", apiKey: apiConfiguration.poeApiKey },
+				},
+				// kilocode_change end
 				{
 					key: "zenmux",
 					options: {
@@ -1853,7 +1869,10 @@ export const webviewMessageHandler = async (
 			break
 
 		case "mode":
-			await provider.handleModeSwitch(message.text as Mode)
+			// kilocode_change: pass reviewScope option to skip scope dialog when starting review from completion suggestion
+			await provider.handleModeSwitch(message.text as Mode, {
+				reviewScope: message.reviewScope,
+			})
 			break
 		case "updatePrompt":
 			if (message.promptMode && message.customPrompt !== undefined) {
