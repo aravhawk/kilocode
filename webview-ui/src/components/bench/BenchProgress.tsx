@@ -1,5 +1,5 @@
 // kilocode_change - new file
-import { Loader2, XCircle } from "lucide-react"
+import { CheckCircle2, Loader2, XCircle } from "lucide-react"
 import { Button, Progress } from "@/components/ui"
 
 interface BenchProgressData {
@@ -22,6 +22,7 @@ export function BenchProgressView({ progress, onCancel }: BenchProgressProps) {
 	const isRunning = progress.phase === "running"
 	const isGenerating = progress.phase === "generating"
 	const isEvaluating = progress.phase === "evaluating"
+	const isComplete = progress.phase === "complete"
 
 	// Calculate overall progress percentage
 	let progressPercent = 0
@@ -34,13 +35,17 @@ export function BenchProgressView({ progress, onCancel }: BenchProgressProps) {
 		progressPercent = 10 + (doneWork / totalWork) * 70
 	} else if (isEvaluating) {
 		progressPercent = 85
+	} else if (isComplete) {
+		progressPercent = 100
 	}
 
 	return (
 		<div className="flex flex-col items-center justify-center h-full gap-5 px-6">
-			{/* Spinner or error icon */}
+			{/* Spinner, complete, or error icon */}
 			{isError ? (
 				<XCircle className="w-8 h-8 text-vscode-errorForeground" />
+			) : isComplete ? (
+				<CheckCircle2 className="w-8 h-8 text-vscode-foreground" />
 			) : (
 				<Loader2 className="w-8 h-8 text-vscode-foreground animate-spin" />
 			)}
@@ -51,6 +56,7 @@ export function BenchProgressView({ progress, onCancel }: BenchProgressProps) {
 					{isGenerating && "Generating Problems"}
 					{isRunning && "Running Benchmark"}
 					{isEvaluating && "Evaluating Results"}
+					{isComplete && "Complete"}
 					{isError && "Error"}
 				</div>
 				{progress.message && (
@@ -59,7 +65,7 @@ export function BenchProgressView({ progress, onCancel }: BenchProgressProps) {
 			</div>
 
 			{/* Progress bar */}
-			{!isError && (
+			{!isError && !isComplete && (
 				<div className="w-full max-w-xs space-y-1.5">
 					<Progress value={progressPercent} className="h-1.5" />
 					<div className="flex justify-between text-[10px] text-vscode-descriptionForeground">

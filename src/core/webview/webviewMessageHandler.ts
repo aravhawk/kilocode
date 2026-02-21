@@ -7,7 +7,12 @@ import pWaitFor from "p-wait-for"
 import * as vscode from "vscode"
 // kilocode_change start
 import axios from "axios"
-import { fastApplyApiProviderSchema, getKiloUrlFromToken, isGlobalStateKey } from "@roo-code/types"
+import {
+	fastApplyApiProviderSchema,
+	getKiloUrlFromToken,
+	isGlobalStateKey,
+	type ProviderSettings,
+} from "@roo-code/types"
 import { getAppUrl } from "@roo-code/types"
 import {
 	MaybeTypedWebviewMessage,
@@ -108,6 +113,9 @@ import { setPendingTodoList } from "../tools/UpdateTodoListTool"
 import { ManagedIndexer } from "../../services/code-index/managed/ManagedIndexer"
 import { SessionManager } from "../../shared/kilocode/cli-sessions/core/SessionManager" // kilocode_change
 import { getEffectiveTelemetrySetting } from "../kilocode/wrapper"
+
+// kilocode_change: Module-scoped active bench service for cancel support
+let _activeBenchService: { cancel: () => void } | null = null
 
 export const webviewMessageHandler = async (
 	provider: ClineProvider,
@@ -4659,17 +4667,27 @@ export const webviewMessageHandler = async (
 				await provider.postMessageToWebview({ type: "benchError", benchError: "No models selected" })
 				break
 			}
+			if (_activeBenchService) {
+				await provider.postMessageToWebview({
+					type: "benchError",
+					benchError: "A benchmark is already running. Cancel it first.",
+				})
+				break
+			}
 			try {
 				const { BenchService } = await import("../../services/bench/BenchService")
-				const benchService = new BenchService(provider.cwd, (await provider.getState()).apiConfiguration as any)
-				;(provider as any)._activeBenchService = benchService
+				const benchService = new BenchService(
+					provider.cwd,
+					(await provider.getState()).apiConfiguration as ProviderSettings,
+				)
+				_activeBenchService = benchService
 				const result = await benchService.startBenchmark(models, async (progress) => {
 					await provider.postMessageToWebview({ type: "benchProgress", benchProgress: progress })
 				})
-				;(provider as any)._activeBenchService = null
+				_activeBenchService = null
 				await provider.postMessageToWebview({ type: "benchResults", benchResults: result })
 			} catch (err: any) {
-				;(provider as any)._activeBenchService = null
+				_activeBenchService = null
 				await provider.postMessageToWebview({
 					type: "benchError",
 					benchError: err?.message || "Benchmark failed",
@@ -4680,7 +4698,10 @@ export const webviewMessageHandler = async (
 		case "benchLoadResults": {
 			try {
 				const { BenchService } = await import("../../services/bench/BenchService")
-				const benchService = new BenchService(provider.cwd, (await provider.getState()).apiConfiguration as any)
+				const benchService = new BenchService(
+					provider.cwd,
+					(await provider.getState()).apiConfiguration as ProviderSettings,
+				)
 				const result = await benchService.loadLatestResult()
 				if (result) {
 					await provider.postMessageToWebview({ type: "benchResults", benchResults: result })
@@ -4698,9 +4719,21 @@ export const webviewMessageHandler = async (
 		case "benchUpdateConfig": {
 			try {
 				const { BenchService } = await import("../../services/bench/BenchService")
-				const benchService = new BenchService(provider.cwd, (await provider.getState()).apiConfiguration as any)
+				const benchService = new BenchService(
+					provider.cwd,
+					(await provider.getState()).apiConfiguration as ProviderSettings,
+				)
 				const currentConfig = await benchService.loadConfig()
-				const merged = { ...currentConfig, ...message.benchConfig }
+				const updates = message.benchConfig || {}
+				const merged = {
+					...currentConfig,
+					...updates,
+					// Deep-merge weights to prevent partial updates from dropping fields
+					weights: {
+						...currentConfig.weights,
+						...(updates.weights || {}),
+					},
+				}
 				await benchService.saveConfig(merged)
 				await provider.postMessageToWebview({ type: "benchConfig", benchConfig: merged })
 			} catch (err: any) {
@@ -4733,14 +4766,27 @@ export const webviewMessageHandler = async (
 			break
 		}
 		case "benchRegenerateProblems": {
+			if (_activeBenchService) {
+				await provider.postMessageToWebview({
+					type: "benchError",
+					benchError: "A benchmark operation is already running. Cancel it first.",
+				})
+				break
+			}
 			try {
 				const { BenchService } = await import("../../services/bench/BenchService")
-				const benchService = new BenchService(provider.cwd, (await provider.getState()).apiConfiguration as any)
+				const benchService = new BenchService(
+					provider.cwd,
+					(await provider.getState()).apiConfiguration as ProviderSettings,
+				)
+				_activeBenchService = benchService
 				const problems = await benchService.generate(async (progress) => {
 					await provider.postMessageToWebview({ type: "benchProgress", benchProgress: progress })
 				})
+				_activeBenchService = null
 				await provider.postMessageToWebview({ type: "benchProblems", benchProblems: problems })
 			} catch (err: any) {
+				_activeBenchService = null
 				await provider.postMessageToWebview({
 					type: "benchError",
 					benchError: err?.message || "Failed to generate problems",
@@ -4749,9 +4795,9 @@ export const webviewMessageHandler = async (
 			break
 		}
 		case "benchCancelRun": {
-			const activeBench = (provider as any)._activeBenchService
-			if (activeBench && typeof activeBench.cancel === "function") {
-				activeBench.cancel()
+			if (_activeBenchService && "cancel" in _activeBenchService) {
+				_activeBenchService.cancel()
+				_activeBenchService = null
 			}
 			break
 		}

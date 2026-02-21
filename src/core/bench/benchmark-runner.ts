@@ -2,7 +2,7 @@
 import type { ProviderSettings } from "@roo-code/types"
 
 import { buildApiHandler } from "../../api"
-import type { BenchConfig, BenchProblem, BenchRawResponse } from "./types"
+import type { BenchProblem, BenchRawResponse } from "./types"
 
 export type RunnerProgressCallback = (update: {
 	currentModel: string
@@ -36,7 +36,6 @@ function buildProviderSettingsForModel(base: ProviderSettings, modelId: string):
 export async function runBenchmark(
 	problems: BenchProblem[],
 	models: string[],
-	config: BenchConfig,
 	providerSettings: ProviderSettings,
 	onProgress: RunnerProgressCallback,
 	abortSignal?: AbortSignal,
@@ -62,7 +61,7 @@ export async function runBenchmark(
 				message: `[${modelId}] Running problem ${pi + 1}/${problems.length}: ${problem.title}`,
 			})
 
-			const result = await runSingleProblem(modelId, problem, config, providerSettings, abortSignal)
+			const result = await runSingleProblem(modelId, problem, providerSettings, abortSignal)
 			results.push(result)
 		}
 	}
@@ -73,16 +72,9 @@ export async function runBenchmark(
 async function runSingleProblem(
 	modelId: string,
 	problem: BenchProblem,
-	_config: BenchConfig,
 	providerSettings: ProviderSettings,
 	abortSignal?: AbortSignal,
 ): Promise<BenchRawResponse> {
-	const settings = buildProviderSettingsForModel(providerSettings, modelId)
-	const handler = buildApiHandler(settings)
-
-	const systemPrompt = MODE_SYSTEM_PROMPTS[problem.mode] || MODE_SYSTEM_PROMPTS.code
-	const messages: { role: "user"; content: string }[] = [{ role: "user", content: problem.prompt }]
-
 	const startTime = Date.now()
 	let ttft = 0
 	let responseText = ""
@@ -92,6 +84,12 @@ async function runSingleProblem(
 	let firstChunkReceived = false
 
 	try {
+		const settings = buildProviderSettingsForModel(providerSettings, modelId)
+		const handler = buildApiHandler(settings)
+
+		const systemPrompt = MODE_SYSTEM_PROMPTS[problem.mode] || MODE_SYSTEM_PROMPTS.code
+		const messages: { role: "user"; content: string }[] = [{ role: "user", content: problem.prompt }]
+
 		const stream = handler.createMessage(systemPrompt, messages)
 
 		for await (const chunk of stream) {
