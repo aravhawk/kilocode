@@ -27,6 +27,22 @@ export class BenchService {
 		this.providerSettings = providerSettings
 	}
 
+	/**
+	 * Build provider settings with a specific model override.
+	 * If modelId is empty, returns the base settings unchanged.
+	 */
+	private buildSettingsForModel(modelId: string): ProviderSettings {
+		if (!modelId) {
+			return this.providerSettings
+		}
+		return {
+			...this.providerSettings,
+			apiModelId: modelId,
+			openRouterModelId: modelId,
+			kilocodeModel: modelId,
+		}
+	}
+
 	async loadConfig(): Promise<BenchConfig> {
 		return storage.loadConfig(this.cwd)
 	}
@@ -59,10 +75,12 @@ export class BenchService {
 			evaluatorModel: config.evaluatorModel || "",
 		}
 
+		const generatorSettings = this.buildSettingsForModel(resolvedConfig.generatorModel)
+
 		const problems = await generateProblems(
 			this.cwd,
 			resolvedConfig,
-			this.providerSettings,
+			generatorSettings,
 			this.abortController.signal,
 		)
 
@@ -118,10 +136,12 @@ export class BenchService {
 			message: "Evaluating responses with AI judge...",
 		})
 
+		const evaluatorSettings = this.buildSettingsForModel(config.evaluatorModel)
+
 		const evaluations = await evaluateAllResponses(
 			problems.problems,
 			rawResponses,
-			this.providerSettings,
+			evaluatorSettings,
 			(evaluated, total) => {
 				onProgress({
 					phase: "evaluating",

@@ -4659,6 +4659,13 @@ export const webviewMessageHandler = async (
 				await provider.postMessageToWebview({ type: "benchError", benchError: "No models selected" })
 				break
 			}
+			if ((provider as any)._activeBenchService) {
+				await provider.postMessageToWebview({
+					type: "benchError",
+					benchError: "A benchmark is already running. Cancel it first.",
+				})
+				break
+			}
 			try {
 				const { BenchService } = await import("../../services/bench/BenchService")
 				const benchService = new BenchService(provider.cwd, (await provider.getState()).apiConfiguration as any)
@@ -4700,7 +4707,16 @@ export const webviewMessageHandler = async (
 				const { BenchService } = await import("../../services/bench/BenchService")
 				const benchService = new BenchService(provider.cwd, (await provider.getState()).apiConfiguration as any)
 				const currentConfig = await benchService.loadConfig()
-				const merged = { ...currentConfig, ...message.benchConfig }
+				const updates = message.benchConfig || {}
+				const merged = {
+					...currentConfig,
+					...updates,
+					// Deep-merge weights to prevent partial updates from dropping fields
+					weights: {
+						...currentConfig.weights,
+						...(updates.weights || {}),
+					},
+				}
 				await benchService.saveConfig(merged)
 				await provider.postMessageToWebview({ type: "benchConfig", benchConfig: merged })
 			} catch (err: any) {

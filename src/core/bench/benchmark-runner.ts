@@ -77,12 +77,6 @@ async function runSingleProblem(
 	providerSettings: ProviderSettings,
 	abortSignal?: AbortSignal,
 ): Promise<BenchRawResponse> {
-	const settings = buildProviderSettingsForModel(providerSettings, modelId)
-	const handler = buildApiHandler(settings)
-
-	const systemPrompt = MODE_SYSTEM_PROMPTS[problem.mode] || MODE_SYSTEM_PROMPTS.code
-	const messages: { role: "user"; content: string }[] = [{ role: "user", content: problem.prompt }]
-
 	const startTime = Date.now()
 	let ttft = 0
 	let responseText = ""
@@ -92,6 +86,12 @@ async function runSingleProblem(
 	let firstChunkReceived = false
 
 	try {
+		const settings = buildProviderSettingsForModel(providerSettings, modelId)
+		const handler = buildApiHandler(settings)
+
+		const systemPrompt = MODE_SYSTEM_PROMPTS[problem.mode] || MODE_SYSTEM_PROMPTS.code
+		const messages: { role: "user"; content: string }[] = [{ role: "user", content: problem.prompt }]
+
 		const stream = handler.createMessage(systemPrompt, messages)
 
 		for await (const chunk of stream) {

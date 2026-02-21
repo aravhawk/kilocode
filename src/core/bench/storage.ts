@@ -20,7 +20,16 @@ export async function loadConfig(cwd: string): Promise<BenchConfig> {
 	const configPath = path.join(getBenchDir(cwd), "config.json")
 	try {
 		const data = await fs.readFile(configPath, "utf-8")
-		return { ...DEFAULT_BENCH_CONFIG, ...JSON.parse(data) }
+		const parsed = JSON.parse(data)
+		return {
+			...DEFAULT_BENCH_CONFIG,
+			...parsed,
+			// Deep-merge weights to prevent partial overrides from dropping fields
+			weights: {
+				...DEFAULT_BENCH_CONFIG.weights,
+				...(parsed.weights || {}),
+			},
+		}
 	} catch {
 		return { ...DEFAULT_BENCH_CONFIG }
 	}
@@ -81,8 +90,12 @@ export async function loadAllResults(cwd: string): Promise<BenchRunResult[]> {
 			.reverse()
 		const results: BenchRunResult[] = []
 		for (const file of jsonFiles) {
-			const data = await fs.readFile(path.join(dir, file), "utf-8")
-			results.push(JSON.parse(data))
+			try {
+				const data = await fs.readFile(path.join(dir, file), "utf-8")
+				results.push(JSON.parse(data))
+			} catch {
+				// Skip corrupted or unreadable result files
+			}
 		}
 		return results
 	} catch {

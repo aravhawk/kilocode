@@ -242,26 +242,51 @@ export async function generateProblems(
 		throw new Error("Generator model did not return valid JSON")
 	}
 
-	const parsed = JSON.parse(jsonMatch[0])
-	const problems: BenchProblem[] = (parsed.problems || []).map(
-		(p: {
-			id: string
-			mode: string
-			title: string
-			prompt: string
-			context_files?: string[]
-			evaluation_criteria?: string[]
-			difficulty?: string
-		}) => ({
-			id: p.id,
-			mode: p.mode as BenchMode,
-			title: p.title,
-			prompt: p.prompt,
-			contextFiles: p.context_files || [],
-			evaluationCriteria: p.evaluation_criteria || [],
-			difficulty: (p.difficulty as "easy" | "medium" | "hard") || "medium",
-		}),
-	)
+	let parsed: any
+	try {
+		parsed = JSON.parse(jsonMatch[0])
+	} catch (parseError) {
+		throw new Error(
+			`Generator model returned invalid JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+		)
+	}
+
+	if (!parsed.problems || !Array.isArray(parsed.problems)) {
+		throw new Error("Generator model response missing 'problems' array")
+	}
+
+	const problems: BenchProblem[] = parsed.problems
+		.filter(
+			(p: any) =>
+				p != null &&
+				typeof p.id === "string" &&
+				p.id.length > 0 &&
+				typeof p.prompt === "string" &&
+				p.prompt.length > 0,
+		)
+		.map(
+			(p: {
+				id: string
+				mode: string
+				title: string
+				prompt: string
+				context_files?: string[]
+				evaluation_criteria?: string[]
+				difficulty?: string
+			}) => ({
+				id: p.id,
+				mode: (p.mode as BenchMode) || "code",
+				title: p.title || p.id,
+				prompt: p.prompt,
+				contextFiles: p.context_files || [],
+				evaluationCriteria: p.evaluation_criteria || [],
+				difficulty: (p.difficulty as "easy" | "medium" | "hard") || "medium",
+			}),
+		)
+
+	if (problems.length === 0) {
+		throw new Error("Generator model produced no valid problems")
+	}
 
 	return {
 		version: "1.0.0",

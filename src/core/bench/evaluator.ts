@@ -50,34 +50,34 @@ export async function evaluateResponse(
 		}
 	}
 
-	const handler = buildApiHandler(providerSettings)
-	const prompt = buildEvaluationPrompt(problem, rawResponse.responseContent)
-	const messages: { role: "user"; content: string }[] = [{ role: "user", content: prompt }]
-
-	const stream = handler.createMessage("You are an evaluation judge. Output only valid JSON.", messages)
-
-	let responseText = ""
-	for await (const chunk of stream) {
-		if (abortSignal?.aborted) {
-			throw new Error("Evaluation cancelled")
-		}
-		if (chunk.type === "text") {
-			responseText += chunk.text
-		}
-	}
-
-	// Parse the JSON response
-	const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-	if (!jsonMatch) {
-		return {
-			qualityScore: 5,
-			relevanceScore: 5,
-			qualityRationale: "Evaluator did not return valid JSON",
-			relevanceRationale: "Evaluator did not return valid JSON",
-		}
-	}
-
 	try {
+		const handler = buildApiHandler(providerSettings)
+		const prompt = buildEvaluationPrompt(problem, rawResponse.responseContent)
+		const messages: { role: "user"; content: string }[] = [{ role: "user", content: prompt }]
+
+		const stream = handler.createMessage("You are an evaluation judge. Output only valid JSON.", messages)
+
+		let responseText = ""
+		for await (const chunk of stream) {
+			if (abortSignal?.aborted) {
+				throw new Error("Evaluation cancelled")
+			}
+			if (chunk.type === "text") {
+				responseText += chunk.text
+			}
+		}
+
+		// Parse the JSON response
+		const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+		if (!jsonMatch) {
+			return {
+				qualityScore: 5,
+				relevanceScore: 5,
+				qualityRationale: "Evaluator did not return valid JSON",
+				relevanceRationale: "Evaluator did not return valid JSON",
+			}
+		}
+
 		const parsed = JSON.parse(jsonMatch[0])
 		return {
 			qualityScore: Math.max(0, Math.min(10, Number(parsed.qualityScore) || 5)),
@@ -85,12 +85,17 @@ export async function evaluateResponse(
 			qualityRationale: String(parsed.qualityRationale || ""),
 			relevanceRationale: String(parsed.relevanceRationale || ""),
 		}
-	} catch {
+	} catch (error) {
+		// Re-throw cancellation errors
+		if (abortSignal?.aborted) {
+			throw error
+		}
+		// Return fallback scores for non-cancellation failures (network errors, parse errors, etc.)
 		return {
 			qualityScore: 5,
 			relevanceScore: 5,
-			qualityRationale: "Failed to parse evaluator response",
-			relevanceRationale: "Failed to parse evaluator response",
+			qualityRationale: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
+			relevanceRationale: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
 		}
 	}
 }
@@ -119,9 +124,23 @@ export async function evaluateAllResponses(
 		const problem = problemMap.get(raw.problemId)
 		if (!problem) continue
 
-		const evalResult = await evaluateResponse(problem, raw, providerSettings, abortSignal)
-		// Key by modelId + problemId to uniquely identify each evaluation
-		evaluations.set(`${raw.modelId}::${raw.problemId}`, evalResult)
+		try {
+			const evalResult = await evaluateResponse(problem, raw, providerSettings, abortSignal)
+			// Key by modelId + problemId to uniquely identify each evaluation
+			evaluations.set(`${raw.modelId}::${raw.problemId}`, evalResult)
+		} catch (error) {
+			// Re-throw cancellation errors
+			if (abortSignal?.aborted) {
+				throw error
+			}
+			// Record fallback for unexpected failures
+			evaluations.set(`${raw.modelId}::${raw.problemId}`, {
+				qualityScore: 0,
+				relevanceScore: 0,
+				qualityRationale: `Evaluation error: ${error instanceof Error ? error.message : String(error)}`,
+				relevanceRationale: `Evaluation error: ${error instanceof Error ? error.message : String(error)}`,
+			})
+		}
 		onProgress(i + 1, rawResponses.length)
 	}
 
